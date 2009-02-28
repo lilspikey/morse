@@ -107,9 +107,7 @@ class LED(object):
         
                 usage = iokit.IOHIDElementGetUsage( tIOHIDElementRef );
                 if usage == kHIDUsage_LED_CapsLock:
-                    # found capslock key
-                    tIOHIDElementType = iokit.IOHIDElementGetType( tIOHIDElementRef )
-            
+                    # found capslock key            
                     minCFIndex = iokit.IOHIDElementGetLogicalMin( tIOHIDElementRef )
                     maxCFIndex = iokit.IOHIDElementGetLogicalMax( tIOHIDElementRef )
                     
