@@ -7,7 +7,7 @@ import sys
 
 # http://en.wikipedia.org/wiki/Morse_code
 DOT=0.2
-SPACING=0.1
+SPACING=DOT
 
 # http://developer.apple.com/samplecode/HID_LED_test_tool/listing2.html
 
@@ -70,6 +70,7 @@ class LED(object):
         self.tIOHIDManagerRef=tIOHIDManagerRef
         self.valueOn=None
         self.valueOff=None
+        self.elementCFArrayRef=None
         
         matchingCFDictRef=create_matching_dict(True, kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard)
         iokit.IOHIDManagerSetDeviceMatching(tIOHIDManagerRef,matchingCFDictRef)
@@ -120,7 +121,13 @@ class LED(object):
                     self.valueOn  = iokit.IOHIDValueCreateWithIntegerValue( kCFAllocatorDefault, tIOHIDElementRef, timestamp, maxCFIndex )
                     self.valueOff = iokit.IOHIDValueCreateWithIntegerValue( kCFAllocatorDefault, tIOHIDElementRef, timestamp, minCFIndex )
                     
-            cf.CFRelease( elementCFArrayRef )
+                    self.elementCFArrayRef=elementCFArrayRef
+                    break
+                    
+            if not self.elementCFArrayRef:        
+                cf.CFRelease( elementCFArrayRef )
+            else:
+                break # found LED
 
         if matchingCFDictRef:
             cf.CFRelease( matchingCFDictRef )
@@ -128,18 +135,23 @@ class LED(object):
     def close(self):
         if self.tIOHIDManagerRef:
             cf.CFRelease(self.tIOHIDManagerRef)
+        if self.elementCFArrayRef:
+            cf.CFRelease( self.elementCFArrayRef )
         if self.valueOn:
             cf.CFRelease(self.valueOn)
         if self.valueOff:
             cf.CFRelease(self.valueOff)
-        
-    def _on(self,enable):
+    
+    def _set_on(self,enable):
         if enable:
             value=self.valueOn
         else:
             value=self.valueOff
-        iokit.IOHIDDeviceSetValue( self.tIOHIDDeviceRef, self.tIOHIDElementRef, value )
-    on=property(fset=_on)
+        
+        err=iokit.IOHIDDeviceSetValue( self.tIOHIDDeviceRef, self.tIOHIDElementRef, value )
+        print err
+        
+    on=property(fset=_set_on)
     
     
     def dot(self):
@@ -155,17 +167,16 @@ class LED(object):
         time.sleep(SPACING)
     
     def space(self):
-        self.on=False
         time.sleep(DOT*3 + SPACING)
     
     def morse(self, code):
         fn={ '.': self.dot, '-': self.dash }
         for c in code:
+            print c
             fn.get(c,self.space)()
 
 
 def morse_code(input):
-    # blank space is seven spaces (dot length)
     table={
         'A': '.-',
         'B': '-...',
@@ -205,7 +216,7 @@ def morse_code(input):
         '9': '----.',
         '0': '-----',
         
-        ' ': '       '
+        ' ': ' '
     }
     
     def _lookup(c):
@@ -218,7 +229,7 @@ def morse_code(input):
 if __name__ == '__main__':
     led=LED()
     try:
-        led.space()
+        led.on=False
     
         verbose=False
         for arg in sys.argv:
