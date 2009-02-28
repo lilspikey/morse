@@ -1,14 +1,18 @@
 from ctypes import *
 from ctypes.util import find_library
 
+import time
+
+# http://en.wikipedia.org/wiki/Morse_code
+DOT=0.2
+SPACING=0.2
+
 # http://developer.apple.com/samplecode/HID_LED_test_tool/listing2.html
 
 iokitLibraryLocation=find_library('IOKit')
-print 'loading IOKit from: %s' % iokitLibraryLocation
 iokit=CDLL(iokitLibraryLocation)
 
 cfLibraryLocation=find_library('CoreFoundation')
-print 'loading CoreFoundation from: %s' % cfLibraryLocation
 cf=CDLL(cfLibraryLocation)
 
 
@@ -33,14 +37,12 @@ kIOHIDElementUsagePageKey="UsagePage"
 kIOHIDDeviceUsageKey="DeviceUsage"
 kIOHIDElementUsageKey="Usage"
 
-print kCFTypeDictionaryValueCallBacks
 
 def create_matching_dict(isDeviceNotElement,inUsagePage,inUsage):
     result=cf.CFDictionaryCreateMutable(kCFAllocatorDefault, 0, byref(kCFTypeDictionaryKeyCallBacks), byref(kCFTypeDictionaryValueCallBacks))
     if result:
         if inUsagePage:
             pageCFNumberRef = cf.CFNumberCreate( kCFAllocatorDefault, kCFNumberIntType, byref(inUsagePage) )
-            print pageCFNumberRef
             if pageCFNumberRef:
                 if isDeviceNotElement:
                     cf.CFDictionarySetValue( result, CFSTR( kIOHIDDeviceUsagePageKey ), pageCFNumberRef )
@@ -51,7 +53,6 @@ def create_matching_dict(isDeviceNotElement,inUsagePage,inUsage):
             
                 if inUsage:
                     usageCFNumberRef = cf.CFNumberCreate( kCFAllocatorDefault, kCFNumberIntType, byref(inUsage) )
-                    print usageCFNumberRef
                     if usageCFNumberRef:
                         if isDeviceNotElement:
                             cf.CFDictionarySetValue( result, CFSTR( kIOHIDDeviceUsageKey ), usageCFNumberRef )
@@ -61,77 +62,106 @@ def create_matching_dict(isDeviceNotElement,inUsagePage,inUsage):
                         cf.CFRelease( usageCFNumberRef )
     return None
 
-tIOHIDManagerRef = iokit.IOHIDManagerCreate( kCFAllocatorDefault, kIOHIDOptionsTypeNone )
-print tIOHIDManagerRef
-
-matchingCFDictRef=create_matching_dict(True, kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard)
-
-iokit.IOHIDManagerSetDeviceMatching(tIOHIDManagerRef,matchingCFDictRef)
-
-if matchingCFDictRef:
-    cf.CFRelease( matchingCFDictRef )
-
-tIOReturn = iokit.IOHIDManagerOpen( tIOHIDManagerRef, kIOHIDOptionsTypeNone )
-print tIOReturn
-
-deviceCFSetRef = iokit.IOHIDManagerCopyDevices( tIOHIDManagerRef )
-print deviceCFSetRef
-
-deviceCount = cf.CFSetGetCount( deviceCFSetRef )
-print deviceCount
-
-# array to hold device refs
-tIOHIDDeviceRefs=(c_void_p*deviceCount)()
-
-cf.CFSetGetValues( deviceCFSetRef, tIOHIDDeviceRefs )
-
-matchingCFDictRef = create_matching_dict(False, kHIDPage_LEDs, c_int(0))
-
-for deviceIndex in range(deviceCount):
-    if not iokit.IOHIDDeviceConformsTo(tIOHIDDeviceRefs[deviceIndex], kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard):
-        print "deviceIndex %d does not conform" % deviceIndex
-        continue
-    print "deviceIndex %d conforms" % deviceIndex
-    
-    elementCFArrayRef = iokit.IOHIDDeviceCopyMatchingElements( tIOHIDDeviceRefs[deviceIndex],matchingCFDictRef,kIOHIDOptionsTypeNone )
-    print elementCFArrayRef
-    
-    elementCount = cf.CFArrayGetCount( elementCFArrayRef )
-    print elementCount
-    
-    for elementIndex in range(elementCount):
-        tIOHIDElementRef = cf.CFArrayGetValueAtIndex( elementCFArrayRef, elementIndex )
-        usagePage = iokit.IOHIDElementGetUsagePage( tIOHIDElementRef );
+class LED(object):
+    def __init__(self):
+        tIOHIDManagerRef = iokit.IOHIDManagerCreate( kCFAllocatorDefault, kIOHIDOptionsTypeNone )
+        self.tIOHIDManagerRef=tIOHIDManagerRef
+        self.valueOn=None
+        self.valueOff=None
         
-        # if this isn't an LED element...
-        if kHIDPage_LEDs.value != usagePage:
-            continue
-        
-        print "found led at %d" % elementIndex
-        
-        usage = iokit.IOHIDElementGetUsage( tIOHIDElementRef );
-        if usage == kHIDUsage_LED_CapsLock:
-            # found capslock key
-            print "found caps lock"
-            print usage
-            tIOHIDElementType = iokit.IOHIDElementGetType( tIOHIDElementRef )
-            print tIOHIDElementType
-            
-            minCFIndex = iokit.IOHIDElementGetLogicalMin( tIOHIDElementRef )
-            maxCFIndex = iokit.IOHIDElementGetLogicalMax( tIOHIDElementRef )
-            
-            print minCFIndex, maxCFIndex
-            
-            timestamp=c_uint64(0)
-            tIOHIDValueRef = iokit.IOHIDValueCreateWithIntegerValue( kCFAllocatorDefault, tIOHIDElementRef, timestamp, minCFIndex )
-            if tIOHIDValueRef:
-                tIOReturn = iokit.IOHIDDeviceSetValue( tIOHIDDeviceRefs[deviceIndex], tIOHIDElementRef, tIOHIDValueRef )
-                print tIOHIDValueRef
-                cf.CFRelease(tIOHIDValueRef)
-    cf.CFRelease( elementCFArrayRef )
+        matchingCFDictRef=create_matching_dict(True, kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard)
+        iokit.IOHIDManagerSetDeviceMatching(tIOHIDManagerRef,matchingCFDictRef)
 
-if tIOHIDManagerRef:
-    cf.CFRelease(tIOHIDManagerRef)
+        if matchingCFDictRef:
+            cf.CFRelease( matchingCFDictRef )
 
-if matchingCFDictRef:
-    cf.CFRelease( matchingCFDictRef )
+        tIOReturn = iokit.IOHIDManagerOpen( tIOHIDManagerRef, kIOHIDOptionsTypeNone )
+        deviceCFSetRef = iokit.IOHIDManagerCopyDevices( tIOHIDManagerRef )
+
+        deviceCount = cf.CFSetGetCount( deviceCFSetRef )
+
+        # array to hold device refs
+        tIOHIDDeviceRefs=(c_void_p*deviceCount)()
+
+        cf.CFSetGetValues( deviceCFSetRef, tIOHIDDeviceRefs )
+
+        matchingCFDictRef = create_matching_dict(False, kHIDPage_LEDs, c_int(0))
+
+        for deviceIndex in range(deviceCount):
+            if not iokit.IOHIDDeviceConformsTo(tIOHIDDeviceRefs[deviceIndex], kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard):
+                continue
+    
+            elementCFArrayRef = iokit.IOHIDDeviceCopyMatchingElements( tIOHIDDeviceRefs[deviceIndex],matchingCFDictRef,kIOHIDOptionsTypeNone )
+    
+            elementCount = cf.CFArrayGetCount( elementCFArrayRef )
+            for elementIndex in range(elementCount):
+                tIOHIDElementRef = cf.CFArrayGetValueAtIndex( elementCFArrayRef, elementIndex )
+                usagePage = iokit.IOHIDElementGetUsagePage( tIOHIDElementRef );
+        
+                # if this isn't an LED element...
+                if kHIDPage_LEDs.value != usagePage:
+                    continue
+        
+                usage = iokit.IOHIDElementGetUsage( tIOHIDElementRef );
+                if usage == kHIDUsage_LED_CapsLock:
+                    # found capslock key
+                    tIOHIDElementType = iokit.IOHIDElementGetType( tIOHIDElementRef )
+            
+                    minCFIndex = iokit.IOHIDElementGetLogicalMin( tIOHIDElementRef )
+                    maxCFIndex = iokit.IOHIDElementGetLogicalMax( tIOHIDElementRef )
+                    
+                    self.tIOHIDDeviceRef=tIOHIDDeviceRefs[deviceIndex]
+                    
+                    self.tIOHIDElementRef = tIOHIDElementRef
+                    
+                    timestamp=c_uint64(0)
+                    self.valueOn  = iokit.IOHIDValueCreateWithIntegerValue( kCFAllocatorDefault, tIOHIDElementRef, timestamp, maxCFIndex )
+                    self.valueOff = iokit.IOHIDValueCreateWithIntegerValue( kCFAllocatorDefault, tIOHIDElementRef, timestamp, minCFIndex )
+                    
+            cf.CFRelease( elementCFArrayRef )
+
+        if matchingCFDictRef:
+            cf.CFRelease( matchingCFDictRef )
+    
+    def close(self):
+        if self.tIOHIDManagerRef:
+            cf.CFRelease(self.tIOHIDManagerRef)
+        if self.valueOn:
+            cf.CFRelease(self.valueOn)
+        if self.valueOff:
+            cf.CFRelease(self.valueOff)
+        
+    def _on(self,enable):
+        if enable:
+            value=self.valueOn
+        else:
+            value=self.valueOff
+        iokit.IOHIDDeviceSetValue( self.tIOHIDDeviceRef, self.tIOHIDElementRef, value )
+    on=property(fset=_on)
+    
+    
+    def dot(self):
+        self.on=True
+        time.sleep(DOT)
+        self.on=False
+        time.sleep(SPACING)
+    
+    def dash(self):
+        self.on=True
+        time.sleep(DOT*3)
+        self.on=False
+        time.sleep(SPACING)
+    
+    def space(self):
+        self.on=False
+        time.sleep(DOT*3 + SPACING)
+    
+    def morse(self, code):
+        fn={ '.': self.dot, '-': self.dash }
+        for c in code:
+            fn.get(c,self.space)()
+    
+led=LED()
+
+led.morse('... --- ...')
+        
