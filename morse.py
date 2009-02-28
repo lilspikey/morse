@@ -227,23 +227,23 @@ def morse_code(input):
         yield ' '.join(_lookup(c) for c in line if _lookup(c))
 
 if __name__ == '__main__':
-    led=LED()
+    led=None
     try:
-        led.on=False
-    
-        verbose=False
         for arg in sys.argv:
-            if arg == '-v':
-                verbose=True
+            if arg == '-led':
+                led=LED()
+                led.on=False
                 sys.argv.remove(arg)
                 break
     
         morse=morse_code(fileinput.input())
     
         for code in morse:
-            if verbose:
+            if not led:
                 print code
-            led.morse(code)
+            else:
+                led.morse(code)
     finally:
-        led.close()
+        if led:
+            led.close()
         
