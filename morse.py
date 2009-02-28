@@ -6,7 +6,7 @@ import fileinput
 import sys
 
 # http://en.wikipedia.org/wiki/Morse_code
-DOT=0.2
+DOT=0.15
 SPACING=DOT
 
 # http://developer.apple.com/samplecode/HID_LED_test_tool/listing2.html
