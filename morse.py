@@ -2,10 +2,12 @@ from ctypes import *
 from ctypes.util import find_library
 
 import time
+import fileinput
+import sys
 
 # http://en.wikipedia.org/wiki/Morse_code
 DOT=0.2
-SPACING=0.2
+SPACING=0.1
 
 # http://developer.apple.com/samplecode/HID_LED_test_tool/listing2.html
 
@@ -160,8 +162,77 @@ class LED(object):
         fn={ '.': self.dot, '-': self.dash }
         for c in code:
             fn.get(c,self.space)()
-    
-led=LED()
 
-led.morse('... --- ...')
+
+def morse_code(input):
+    # blank space is seven spaces (dot length)
+    table={
+        'A': '.-',
+        'B': '-...',
+        'C': '-.-.',
+        'D': '-..',
+        'E': '.',
+        'F': '..-.',
+        'G': '--.',
+        'H': '....',
+        'I': '..',
+        'J': '.---',
+        'K': '-.-',
+        'L': '.-..',
+        'M': '--',
+        'N': '-.',
+        'O': '---',
+        'P': '.--.',
+        'Q': '--.-',
+        'R': '.-.',
+        'S': '...',
+        'T': '-',
+        'U': '..-',
+        'V': '...-',
+        'W': '.--',
+        'X': '-..-',
+        'Y': '-.--',
+        'Z': '--..',
+        
+        '1': '.----',
+        '2': '..---',
+        '3': '...--',
+        '4': '....-',
+        '5': '.....',
+        '6': '-....',
+        '7': '--...',
+        '8': '---..',
+        '9': '----.',
+        '0': '-----',
+        
+        ' ': '       '
+    }
+    
+    def _lookup(c):
+        # unknown chars get removed
+        return table.get(c.upper(),'')
+    
+    for line in input:
+        yield ' '.join(_lookup(c) for c in line if _lookup(c))
+
+if __name__ == '__main__':
+    led=LED()
+    try:
+        led.space()
+    
+        verbose=False
+        for arg in sys.argv:
+            if arg == '-v':
+                verbose=True
+                sys.argv.remove(arg)
+                break
+    
+        morse=morse_code(fileinput.input())
+    
+        for code in morse:
+            if verbose:
+                print code
+            led.morse(code)
+    finally:
+        led.close()
         
