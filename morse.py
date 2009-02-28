@@ -149,7 +149,8 @@ class LED(object):
             value=self.valueOff
         
         err=iokit.IOHIDDeviceSetValue( self.tIOHIDDeviceRef, self.tIOHIDElementRef, value )
-        print err
+        if err:
+            raise RuntimeError("Problem setting device value er=0x%x" % c_uint(err).value)
         
     on=property(fset=_set_on)
     
@@ -172,7 +173,6 @@ class LED(object):
     def morse(self, code):
         fn={ '.': self.dot, '-': self.dash }
         for c in code:
-            print c
             fn.get(c,self.space)()
 
 
